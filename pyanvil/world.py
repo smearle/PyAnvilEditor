@@ -162,15 +162,13 @@ class Chunk:
     def unpack(raw_nbt):
         sections = {}
         for section in raw_nbt.get('Level').get('Sections').children:
+            states = []  # Sections which contain only air have no states.
             if section.has('BlockStates'):
                 flatstates = [c.get() for c in section.get('BlockStates').children]
                 pack_size = int((len(flatstates) * 64) / (Sizes.CHUNK_WIDTH ** 3))
                 states = [
                     Chunk._read_width_from_loc(flatstates, pack_size, i) for i in range(Sizes.CHUNK_WIDTH ** 3)
                 ]
-            else:
-                # Sections which contain only air have no states.
-                states = []
             if section.has('Palette'):
                 palette = [
                     BlockState(
