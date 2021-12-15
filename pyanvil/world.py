@@ -2,15 +2,15 @@ import sys
 import math
 import zlib
 import time
-from enum import Enum
+from enum import IntEnum
 from pathlib import Path
-from .nbt import NBT
+from .nbt import *
 from .stream import InputStream, OutputStream
 from .biomes import Biome
 from .canvas import Canvas
 
 
-class Sizes(Enum):
+class Sizes(IntEnum):
     REGION_WIDTH = 32
     CHUNK_WIDTH = 16
 
@@ -74,37 +74,37 @@ class ChunkSection:
         if dirty:
             self.palette = list(set([b._state for b in self.blocks] + [BlockState('minecraft:air', {})]))
             self.palette.sort(key=lambda s: s.name)
-            serial_section.add_child(NBT.ByteTag(self.y_index, tag_name='Y'))
+            serial_section.add_child(ByteTag(self.y_index, tag_name='Y'))
             mat_id_mapping = {self.palette[i]: i for i in range(len(self.palette))}
             new_palette = self._serialize_palette()
             serial_section.add_child(new_palette)
             serial_section.add_child(self._serialize_blockstates(mat_id_mapping))
 
         if not serial_section.has('SkyLight'):
-            serial_section.add_child(NBT.ByteArrayTag(tag_name='SkyLight', children=[NBT.ByteTag(-1, tag_name='None') for i in range(2048)]))
+            serial_section.add_child(ByteArrayTag(tag_name='SkyLight', children=[ByteTag(-1, tag_name='None') for i in range(2048)]))
 
         if not serial_section.has('BlockLight'):
-            serial_section.add_child(NBT.ByteArrayTag(tag_name='BlockLight', children=[NBT.ByteTag(-1, tag_name='None') for i in range(2048)]))
+            serial_section.add_child(ByteArrayTag(tag_name='BlockLight', children=[ByteTag(-1, tag_name='None') for i in range(2048)]))
 
         return serial_section
 
     def _serialize_palette(self):
-        serial_palette = NBT.ListTag(NBT.CompoundTag.clazz_id, tag_name='Palette')
+        serial_palette = ListTag(CompoundTag.clazz_id, tag_name='Palette')
         for state in self.palette:
-            palette_item = NBT.CompoundTag(tag_name='None', children=[
-                NBT.StringTag(state.name, tag_name='Name')
+            palette_item = CompoundTag(tag_name='None', children=[
+                StringTag(state.name, tag_name='Name')
             ])
             if len(state.props) != 0:
-                serial_props = NBT.CompoundTag(tag_name='Properties')
+                serial_props = CompoundTag(tag_name='Properties')
                 for name, val in state.props.items():
-                    serial_props.add_child(NBT.StringTag(str(val), tag_name=name))
+                    serial_props.add_child(StringTag(str(val), tag_name=name))
                 palette_item.add_child(serial_props)
             serial_palette.add_child(palette_item)
 
         return serial_palette
 
     def _serialize_blockstates(self, state_mapping):
-        serial_states = NBT.LongArrayTag(tag_name='BlockStates')
+        serial_states = LongArrayTag(tag_name='BlockStates')
         width = math.ceil(math.log(len(self.palette), 2))
         if width < 4:
             width = 4
@@ -126,7 +126,7 @@ class ChunkSection:
                     lng = (lng << width) + state_mapping[block._state]
 
             lng = int.from_bytes(lng.to_bytes(8, byteorder='big', signed=False), byteorder='big', signed=True)
-            serial_states.add_child(NBT.LongTag(lng))
+            serial_states.add_child(LongTag(lng))
         return serial_states
 
 
@@ -147,7 +147,7 @@ class Chunk:
         if key not in self.sections:
             self.sections[key] = ChunkSection(
                 [Block(dirty=True) for i in range(4096)],
-                NBT.CompoundTag(),
+                CompoundTag(),
                 key
             )
         return self.sections[key]
@@ -208,7 +208,7 @@ class Chunk:
         return rtn
 
     def pack(self):
-        new_sections = NBT.ListTag(NBT.CompoundTag.clazz_id, tag_name='Sections', children=[
+        new_sections = ListTag(CompoundTag.clazz_id, tag_name='Sections', children=[
             self.sections[sec].serialize() for sec in self.sections
         ])
         new_nbt = self.raw_nbt.clone()
@@ -254,7 +254,7 @@ class World:
             raise FileNotFoundError(f'No such folder \"{self.world_folder}\"')
         self.chunks = {}
 
-    def __enter__(self):
+    def __enter__(self) -> 'World':
         return self
 
     def __exit__(self, typ, val, trace):

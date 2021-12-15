@@ -21,14 +21,14 @@ Calling `serialize` on an nbt tag with a file stream will write the binary data 
 
 For example, to get the name of a region from the `level.dat` file of a region folder:
 ```python
-import nbt, stream, gzip
+import NBT, stream, gzip
 
 # Open the file for reading in binary mode (level.dat is just gzipped)
 with gzip.open('level.dat', mode='rb') as level:
     # Read the file in to an input stream
     in_stream = stream.InputStream(level.read())
     # Decode the stream
-    level_data = nbt.parse_nbt(in_stream)
+    level_data = NBT.parse_nbt(in_stream)
     # Get the value of Data > LevelName
     lvl_name = level_data.get("Data").get("LevelName").get()
     # lvl_name is now a string containing the name of the level used
