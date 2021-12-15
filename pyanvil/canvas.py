@@ -11,9 +11,9 @@ class WorldTask:
 class Canvas:
 
     def __init__(self, world, auto_commit=True):
-        self.world = world
-        self.work_queue = []
-        self.auto_commit = auto_commit
+        self.world: 'World' = world
+        self.work_queue: list[WorldTask] = []
+        self.auto_commit: bool = auto_commit
         self.selection = set()
 
     def fill(self, state):
@@ -21,7 +21,7 @@ class Canvas:
         for b in list(self.selection):
             self.work_queue.append(WorldTask(b, my_state))
 
-        self.selection.clear()
+        self.deselect()
 
         if self.auto_commit:
             self.commit()
@@ -37,7 +37,7 @@ class Canvas:
         new_schem = Schematic({
             (loc[0] - min_x, loc[1] - min_y, loc[2] - min_z): self.world.get_block(loc).get_state() for loc in self.selection
         })
-        self.selection.clear()
+        self.deselect()
         return new_schem
 
     def commit(self):

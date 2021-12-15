@@ -16,7 +16,7 @@ class Sizes(Enum):
 
 
 class BlockState:
-    def __init__(self, name, props):
+    def __init__(self, name: str = 'minecraft:air', props: map = {}):
         self.name = name
         self.props = props
         self.id = None
@@ -35,11 +35,11 @@ class BlockState:
 
 
 class Block:
-    def __init__(self, state, block_light=0, sky_light=0, dirty=False):
-        self._state = state
-        self.block_light = block_light
-        self.sky_light = sky_light
-        self._dirty = dirty
+    def __init__(self, state = BlockState(), block_light: int = 0, sky_light: int = 0, dirty: bool = False):
+        self._state: BlockState = state
+        self.block_light: int = block_light
+        self.sky_light: int = sky_light
+        self._dirty: bool = dirty
 
     def __str__(self):
         return f'Block({str(self._state)}, {self.block_light}, {self.sky_light})'
@@ -137,7 +137,7 @@ class Chunk:
         key = int(y / Sizes.CHUNK_WIDTH)
         if key not in self.sections:
             self.sections[key] = ChunkSection(
-                [Block(BlockState('minecraft:air', {}), 0, 0, dirty=True) for i in range(4096)],
+                [Block(dirty=True) for i in range(4096)],
                 nbt.CompoundTag(),
                 key
             )
@@ -169,6 +169,7 @@ class Chunk:
                 states = [
                     Chunk._read_width_from_loc(flatstates, pack_size, i) for i in range(Sizes.CHUNK_WIDTH ** 3)
                 ]
+            palette: list[BlockState] = None
             if section.has('Palette'):
                 palette = [
                     BlockState(
@@ -176,17 +177,14 @@ class Chunk:
                         state.get('Properties').to_dict() if state.has('Properties') else {}
                     ) for state in section.get('Palette').children
                 ]
-            else:
-                # Nor any palette entries.
-                palette = None
             block_lights = Chunk._divide_nibbles(section.get('BlockLight').get()) if section.has('BlockLight') else None
             sky_lights = Chunk._divide_nibbles(section.get('SkyLight').get()) if section.has('SkyLight') else None
             blocks = []
-            for i in range(len(states)):
-                state = palette[states[i]]
+            for i, state in enumerate(states):
+                state = palette[state]
                 block_light = block_lights[i] if block_lights else 0
                 sky_light = sky_lights[i] if sky_lights else 0
-                blocks.append(Block(state, block_light, sky_light))
+                blocks.append(Block(state=state, block_light=block_light, sky_light=sky_light))
             sections[section.get('Y').get()] = ChunkSection(blocks, section, section.get('Y').get())
         return sections
 
@@ -226,7 +224,7 @@ class Chunk:
             comp = Chunk._read_bits(long_list[int(offset/64)], width, offset % 64)
             return comp
 
-    def _read_bits(num, width, start):
+    def _read_bits(num, width: int, start: int):
         # create a mask of size 'width' of 1 bits
         mask = (2 ** width) - 1
         # shift it out to where we need for the mask
