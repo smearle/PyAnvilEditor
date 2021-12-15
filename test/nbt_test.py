@@ -1,6 +1,6 @@
-from pyanvil.nbt import ByteTag, ShortTag, IntTag, LongTag, FloatTag, DoubleTag
-from pyanvil.nbt import ByteArrayTag, StringTag, ListTag, CompoundTag, IntArrayTag, LongArrayTag
-from pyanvil.nbt import NBT
+from pyanvil.components import ByteTag, ShortTag, IntTag, LongTag, FloatTag, DoubleTag
+from pyanvil.components import ByteArrayTag, StringTag, ListTag, CompoundTag, IntArrayTag, LongArrayTag
+from pyanvil.utility.nbt import NBT
 from pyanvil.stream import OutputStream, InputStream
 
 

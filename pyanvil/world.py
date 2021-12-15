@@ -4,204 +4,10 @@ import zlib
 import time
 from enum import IntEnum
 from pathlib import Path
-from .nbt import *
+from .utility.nbt import NBT
 from .stream import InputStream, OutputStream
-from .biomes import Biome
 from .canvas import Canvas
-from .components import BlockState, Block
-
-
-class Sizes(IntEnum):
-    REGION_WIDTH = 32
-    SUBCHUNK_WIDTH = 16
-
-
-class ChunkSection:
-    def __init__(self, blocks: dict[int, Block], raw_section, y_index):
-        self.blocks: dict[int, Block] = blocks
-        self.raw_section = raw_section
-        self.y_index = y_index
-
-    def get_block(self, block_pos):
-        x = block_pos[0]
-        y = block_pos[1]
-        z = block_pos[2]
-
-        return self.blocks[x + z * Sizes.SUBCHUNK_WIDTH + y * Sizes.SUBCHUNK_WIDTH ** 2]
-
-    def serialize(self):
-        serial_section = self.raw_section
-        dirty = any([b._dirty for b in self.blocks])
-        if dirty:
-            self.palette = list(set([b._state for b in self.blocks] + [BlockState('minecraft:air', {})]))
-            self.palette.sort(key=lambda s: s.name)
-            serial_section.add_child(ByteTag(tag_value=self.y_index, tag_name='Y'))
-            mat_id_mapping = {self.palette[i]: i for i in range(len(self.palette))}
-            new_palette = self._serialize_palette()
-            serial_section.add_child(new_palette)
-            serial_section.add_child(self._serialize_blockstates(mat_id_mapping))
-
-        if not serial_section.has('SkyLight'):
-            serial_section.add_child(ByteArrayTag(tag_name='SkyLight', children=[ByteTag(-1, tag_name='None') for i in range(2048)]))
-
-        if not serial_section.has('BlockLight'):
-            serial_section.add_child(ByteArrayTag(tag_name='BlockLight', children=[ByteTag(-1, tag_name='None') for i in range(2048)]))
-
-        return serial_section
-
-    def _serialize_palette(self):
-        serial_palette = ListTag(CompoundTag.clazz_id, tag_name='Palette')
-        for state in self.palette:
-            palette_item = CompoundTag(tag_name='None', children=[
-                StringTag(state.name, tag_name='Name')
-            ])
-            if len(state.props) != 0:
-                serial_props = CompoundTag(tag_name='Properties')
-                for name, val in state.props.items():
-                    serial_props.add_child(StringTag(str(val), tag_name=name))
-                palette_item.add_child(serial_props)
-            serial_palette.add_child(palette_item)
-
-        return serial_palette
-
-    def _serialize_blockstates(self, state_mapping):
-        serial_states = LongArrayTag(tag_name='BlockStates')
-        width = math.ceil(math.log(len(self.palette), 2))
-        if width < 4:
-            width = 4
-
-        # max amount of states that fit in a long
-        states_per_long = 64 // width
-
-        # amount of longs
-        arraylength = math.ceil(len(self.blocks) / states_per_long)
-
-        for long_index in range(arraylength):
-            lng = 0
-            for state in range(states_per_long):
-                # insert blocks in reverse, so first one ends up most to the right
-                block_index = long_index * states_per_long + (states_per_long - state - 1)
-
-                if block_index < len(self.blocks):
-                    block = self.blocks[block_index]
-                    lng = (lng << width) + state_mapping[block._state]
-
-            lng = int.from_bytes(lng.to_bytes(8, byteorder='big', signed=False), byteorder='big', signed=True)
-            serial_states.add_child(LongTag(lng))
-        return serial_states
-
-
-class Chunk:
-    def __init__(self, xpos, zpos, sections: dict[int, ChunkSection], raw_nbt, orig_size):
-        self.xpos = xpos
-        self.zpos = zpos
-        self.sections: dict[int, ChunkSection] = sections
-        self.raw_nbt = raw_nbt
-        self.biomes = [Biome.from_index(i) for i in self.raw_nbt.get('Level').get('Biomes').get()]
-        self.orig_size = orig_size
-
-    def get_block(self, block_pos):
-        return self.get_section(block_pos[1]).get_block([n % Sizes.SUBCHUNK_WIDTH for n in block_pos])
-
-    def get_section(self, y) -> ChunkSection:
-        key = int(y / Sizes.SUBCHUNK_WIDTH)
-        if key not in self.sections:
-            self.sections[key] = ChunkSection(
-                [Block(dirty=True) for i in range(4096)],
-                CompoundTag(),
-                key
-            )
-        return self.sections[key]
-
-    def find_like(self, string):
-        results = []
-        for sec in self.sections:
-            section = self.sections[sec]
-            for x1 in range(Sizes.SUBCHUNK_WIDTH):
-                for y1 in range(Sizes.SUBCHUNK_WIDTH):
-                    for z1 in range(Sizes.SUBCHUNK_WIDTH):
-                        if string in section.get_block((x1, y1, z1))._state.name:
-                            results.append((
-                                (x1 + self.xpos * Sizes.SUBCHUNK_WIDTH, y1 + sec * Sizes.SUBCHUNK_WIDTH, z1 + self.zpos * Sizes.SUBCHUNK_WIDTH),
-                                section.get_block((x1, y1, z1))
-                            ))
-        return results
-
-    # Blockstates are packed based on the number of values in the pallet.
-    # This selects the pack size, then splits out the ids
-    def unpack(raw_nbt):
-        sections = {}
-        for section in raw_nbt.get('Level').get('Sections').children:
-            states = []  # Sections which contain only air have no states.
-            if section.has('BlockStates'):
-                flatstates = [c.get() for c in section.get('BlockStates').children]
-                pack_size = int((len(flatstates) * 64) / (Sizes.SUBCHUNK_WIDTH ** 3))
-                states = [
-                    Chunk._read_width_from_loc(flatstates, pack_size, i) for i in range(Sizes.SUBCHUNK_WIDTH ** 3)
-                ]
-            palette: list[BlockState] = None
-            if section.has('Palette'):
-                palette = [
-                    BlockState(
-                        state.get('Name').get(),
-                        state.get('Properties').to_dict() if state.has('Properties') else {}
-                    ) for state in section.get('Palette').children
-                ]
-            block_lights = Chunk._divide_nibbles(section.get('BlockLight').get()) if section.has('BlockLight') else None
-            sky_lights = Chunk._divide_nibbles(section.get('SkyLight').get()) if section.has('SkyLight') else None
-            blocks = []
-            for i, state in enumerate(states):
-                state = palette[state]
-                block_light = block_lights[i] if block_lights else 0
-                sky_light = sky_lights[i] if sky_lights else 0
-                blocks.append(Block(state=state, block_light=block_light, sky_light=sky_light))
-            sections[section.get('Y').get()] = ChunkSection(blocks, section, section.get('Y').get())
-        return sections
-
-    def _divide_nibbles(arry):
-        rtn = []
-        f2_mask = (2 ** 4) - 1
-        f1_mask = f2_mask << 4
-        for s in arry:
-            rtn.append(s & f1_mask)
-            rtn.append(s & f2_mask)
-
-        return rtn
-
-    def pack(self):
-        new_sections = ListTag(CompoundTag.clazz_id, tag_name='Sections', children=[
-            self.sections[sec].serialize() for sec in self.sections
-        ])
-        new_nbt = self.raw_nbt.clone()
-        new_nbt.get('Level').add_child(new_sections)
-
-        return new_nbt
-
-    def _read_width_from_loc(long_list, width, position):
-        # max amount of blockstates that fit in each long
-        states_per_long = 64 // width
-
-        # the long in which this blockstate is stored
-        long_index = position // states_per_long
-
-        # at which bit in the long this state is located
-        position_in_long = (position % states_per_long)*width
-        return Chunk._read_bits(long_list[long_index], width, position_in_long)
-
-    def _read_bits(num, width: int, start: int):
-        # create a mask of size 'width' of 1 bits
-        mask = (2 ** width) - 1
-        # shift it out to where we need for the mask
-        mask = mask << start
-        # select the bits we need
-        comp = num & mask
-        # move them back to where they should be
-        comp = comp >> start
-
-        return comp
-
-    def __str__(self):
-        return f'Chunk({str(self.xpos)},{str(self.zpos)})'
+from .components import Sizes, Chunk
 
 
 class World:
@@ -282,7 +88,7 @@ class World:
                         if other_loc[0] > loc[0]:
                             locations[i][0] = other_loc[0] + data_len_diff
 
-                    header_length = 2*4096
+                    header_length = 2 * 4096
                     data_in_file[(loc[0] - header_length):(loc[0] + original_sector_length - header_length)] = data
                     if self.debug:
                         print(f'Saving {chunk} with', {'loc': loc, 'new_len': datalen, 'old_len': chunk.orig_size, 'sector_len': block_data_len})
@@ -291,15 +97,15 @@ class World:
                 region.seek(0)
 
                 for c_loc in locations:
-                    region.write(int(c_loc[0]/4096).to_bytes(3, byteorder='big', signed=False))
-                    region.write(int(c_loc[1]/4096).to_bytes(1, byteorder='big', signed=False))
+                    region.write(int(c_loc[0] / 4096).to_bytes(3, byteorder='big', signed=False))
+                    region.write(int(c_loc[1] / 4096).to_bytes(1, byteorder='big', signed=False))
 
                 for ts in timestamps:
                     region.write(ts.to_bytes(4, byteorder='big', signed=False))
 
                 region.write(data_in_file)
 
-                required_padding = (math.ceil(region.tell()/4096.0) * 4096) - region.tell()
+                required_padding = (math.ceil(region.tell() / 4096.0) * 4096) - region.tell()
 
                 region.write((0).to_bytes(required_padding, byteorder='big', signed=False))
 
@@ -332,7 +138,7 @@ class World:
             chunk = self._load_binary_chunk_at(region, loc[0], loc[1])
             self.chunks[chunk_pos] = chunk
 
-    def _load_binary_chunk_at(self, region_file, offset, max_size):
+    def _load_binary_chunk_at(self, region_file, offset, max_size) -> Chunk:
         region_file.seek(offset)
         datalen = int.from_bytes(region_file.read(4), byteorder='big', signed=False)
         compr = region_file.read(1)
