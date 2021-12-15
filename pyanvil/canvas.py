@@ -30,9 +30,9 @@ class Canvas:
         self.selection.clear()
 
     def copy(self):
-        min_x = min([l[0] for l in self.selection])
-        min_y = min([l[1] for l in self.selection])
-        min_z = min([l[2] for l in self.selection])
+        min_x = min((l[0] for l in self.selection))
+        min_y = min((l[1] for l in self.selection))
+        min_z = min((l[2] for l in self.selection))
         print(min_x, min_y, min_z)
         new_schem = Schematic({
             (loc[0] - min_x, loc[1] - min_y, loc[2] - min_z): self.world.get_block(loc).get_state() for loc in self.selection
