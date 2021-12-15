@@ -1,16 +1,19 @@
 import struct
 
 
-def write_string(stream, string):
-    stream.write(len(string).to_bytes(2, byteorder='big', signed=False))
-    for c in string:
-        stream.write(ord(c).to_bytes(1, byteorder='big', signed=False))
+class NBT:
 
+    _parsers = {}
 
-def register_parser(id, clazz):
-    global _parsers
+    @staticmethod
+    def write_string(stream, string):
+        stream.write(len(string).to_bytes(2, byteorder='big', signed=False))
+        for c in string:
+            stream.write(ord(c).to_bytes(1, byteorder='big', signed=False))
 
-    _parsers[id] = clazz
+    @staticmethod
+    def register_parser(id, clazz):
+        _parsers[id] = clazz
 
 
 def create_simple_nbt_class(tag_id, class_tag_name, tag_width, tag_parser):
@@ -49,7 +52,7 @@ def create_simple_nbt_class(tag_id, class_tag_name, tag_width, tag_parser):
         def serialize(self, stream, include_name=True):
             if include_name:
                 stream.write(type(self).clazz_id.to_bytes(1, byteorder='big', signed=False))
-                write_string(stream, self.tag_name)
+                NBT.write_string(stream, self.tag_name)
 
             stream.write(struct.pack(type(self).clazz_parser, self.tag_value))
 
@@ -62,7 +65,7 @@ def create_simple_nbt_class(tag_id, class_tag_name, tag_width, tag_parser):
         def __eq__(self, other):
             return self.tag_name == other.tag_name and self.tag_value == other.tag_value
 
-    register_parser(tag_id, DataNBTTag)
+    NBT.register_parser(tag_id, DataNBTTag)
 
     return DataNBTTag
 
@@ -94,7 +97,7 @@ def create_string_nbt_class(tag_id):
         def serialize(self, stream, include_name=True):
             if include_name:
                 stream.write(type(self).clazz_id.to_bytes(1, byteorder='big', signed=False))
-                write_string(stream, self.tag_name)
+                NBT.write_string(stream, self.tag_name)
 
             stream.write(len(self.tag_value).to_bytes(2, byteorder='big', signed=False))
             for c in self.tag_value:
@@ -109,7 +112,7 @@ def create_string_nbt_class(tag_id):
         def __eq__(self, other):
             return self.tag_name == other.tag_name and self.tag_value == other.tag_value
 
-    register_parser(tag_id, DataNBTTag)
+    NBT.register_parser(tag_id, DataNBTTag)
 
     return DataNBTTag
 
@@ -149,7 +152,7 @@ def create_array_nbt_class(tag_id, tag_name, sub_type):
         def serialize(self, stream, include_name=True):
             if include_name:
                 stream.write(type(self).clazz_id.to_bytes(1, byteorder='big', signed=False))
-                write_string(stream, self.tag_name)
+                NBT.write_string(stream, self.tag_name)
 
             stream.write(len(self.children).to_bytes(4, byteorder='big', signed=True))
 
@@ -168,7 +171,7 @@ def create_array_nbt_class(tag_id, tag_name, sub_type):
                 len(self.children) == len(other.children) and \
                 not any([not self.children[i] == other.children[i] for i in range(len(self.children))])
 
-    register_parser(tag_id, ArrayNBTTag)
+    NBT.register_parser(tag_id, ArrayNBTTag)
 
     return ArrayNBTTag
 
@@ -211,7 +214,7 @@ def create_list_nbt_class(tag_id):
         def serialize(self, stream, include_name=True):
             if include_name:
                 stream.write(type(self).clazz_id.to_bytes(1, byteorder='big', signed=False))
-                write_string(stream, self.tag_name)
+                NBT.write_string(stream, self.tag_name)
 
             stream.write(self.sub_type_id.to_bytes(1, byteorder='big', signed=False))
             stream.write(len(self.children).to_bytes(4, byteorder='big', signed=True))
@@ -231,7 +234,7 @@ def create_list_nbt_class(tag_id):
                 len(self.children) == len(other.children) and \
                 (len(self.children) == 0 or not any([not self.children[i] == other.children[i] for i in range(len(self.children))]))
 
-    register_parser(tag_id, ListNBTTag)
+    NBT.register_parser(tag_id, ListNBTTag)
 
     return ListNBTTag
 
@@ -282,7 +285,7 @@ def create_compund_nbt_class(tag_id):
         def serialize(self, stream, include_name=True):
             if include_name:
                 stream.write(type(self).clazz_id.to_bytes(1, byteorder='big', signed=False))
-                write_string(stream, self.tag_name)
+                NBT.write_string(stream, self.tag_name)
 
             for tag_name in self.children:
                 self.children[tag_name].serialize(stream, include_name=True)
@@ -307,7 +310,7 @@ def create_compund_nbt_class(tag_id):
                 len(self.children) == len(other.children) and \
                 passed
 
-    register_parser(tag_id, CompundNBTTag)
+    NBT.register_parser(tag_id, CompundNBTTag)
 
     return CompundNBTTag
 
