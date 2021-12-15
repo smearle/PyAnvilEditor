@@ -188,7 +188,7 @@ class Chunk:
 
     def _divide_nibbles(arry):
         rtn = []
-        f2_mask = 2**4-1
+        f2_mask = (2 ** 4) - 1
         f1_mask = f2_mask << 4
         for s in arry:
             rtn.append(s & f1_mask)
@@ -289,22 +289,23 @@ class World:
                     chunkNBT.serialize(strm)
                     data = zlib.compress(strm.get_data())
                     datalen = len(data)
-                    block_data_len = math.ceil((datalen + 5)/4096.0)*4096
+                    block_data_len = math.ceil((datalen + 5) / 4096.0) * 4096
+                    chunk_index = (chunk.xpos % 32) + (chunk.zpos % 32) * 32
                     # Constuct new data block
                     data = (datalen + 1).to_bytes(4, byteorder='big', signed=False) + \
-                        (2).to_bytes(1, byteorder='big', signed=False) + \
+                        (2).to_bytes(length=1, byteorder='big', signed=False) + \
                         data + \
                         (0).to_bytes(block_data_len - (datalen + 5), byteorder='big', signed=False)
 
-                    timestamps[((chunk.xpos % 32) + (chunk.zpos % 32) * 32)] = int(time.time())
+                    timestamps[chunk_index] = int(time.time())
 
-                    loc = locations[((chunk.xpos % 32) + (chunk.zpos % 32) * 32)]
+                    loc = locations[chunk_index]
                     original_sector_length = loc[1]
                     data_len_diff = block_data_len - original_sector_length
                     if data_len_diff != 0 and self.debug:
                         print(f'Danger: Diff is {data_len_diff}, shifting required!')
 
-                    locations[((chunk.xpos % 32) + (chunk.zpos % 32) * 32)][1] = block_data_len
+                    locations[chunk_index][1] = block_data_len
 
                     if loc[0] == 0 or loc[1] == 0:
                         print('Chunk not generated', chunk)
