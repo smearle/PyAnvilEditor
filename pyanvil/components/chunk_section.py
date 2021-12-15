@@ -16,9 +16,36 @@ class ChunkSection:
 
         return self.blocks[x + z * Sizes.SUBCHUNK_WIDTH + y * Sizes.SUBCHUNK_WIDTH ** 2]
 
+    @staticmethod
+    def from_nbt(section_nbt) -> 'ChunkSection':
+        states = []  # Sections which contain only air have no states.
+        if section_nbt.has('BlockStates'):
+            flatstates = [c.get() for c in section_nbt.get('BlockStates').children]
+            pack_size = (len(flatstates) * 64) // (Sizes.SUBCHUNK_WIDTH ** 3)
+            states = [
+                ChunkSection._read_width_from_loc(flatstates, pack_size, i) for i in range(Sizes.SUBCHUNK_WIDTH ** 3)
+            ]
+        palette: list[BlockState] = None
+        if section_nbt.has('Palette'):
+            palette = [
+                BlockState(
+                    state.get('Name').get(),
+                    state.get('Properties').to_dict() if state.has('Properties') else {}
+                ) for state in section_nbt.get('Palette').children
+            ]
+        block_lights = ChunkSection._divide_nibbles(section_nbt.get('BlockLight').get()) if section_nbt.has('BlockLight') else None
+        sky_lights = ChunkSection._divide_nibbles(section_nbt.get('SkyLight').get()) if section_nbt.has('SkyLight') else None
+        blocks = []
+        for i, state in enumerate(states):
+            state = palette[state]
+            block_light = block_lights[i] if block_lights else 0
+            sky_light = sky_lights[i] if sky_lights else 0
+            blocks.append(Block(state=state, block_light=block_light, sky_light=sky_light))
+        return ChunkSection(blocks, section_nbt, section_nbt.get('Y').get())
+
     def serialize(self):
         serial_section = self.raw_section
-        dirty = any([b._dirty for b in self.blocks])
+        dirty = any((b._dirty for b in self.blocks))
         if dirty:
             self.palette = list(set([b._state for b in self.blocks] + [BlockState('minecraft:air', {})]))
             self.palette.sort(key=lambda s: s.name)
@@ -76,3 +103,39 @@ class ChunkSection:
             lng = int.from_bytes(lng.to_bytes(8, byteorder='big', signed=False), byteorder='big', signed=True)
             serial_states.add_child(LongTag(lng))
         return serial_states
+
+    @staticmethod
+    def _read_width_from_loc(long_list, width, position):
+        # max amount of blockstates that fit in each long
+        states_per_long = 64 // width
+
+        # the long in which this blockstate is stored
+        long_index = position // states_per_long
+
+        # at which bit in the long this state is located
+        position_in_long = (position % states_per_long) * width
+        return ChunkSection._read_bits(long_list[long_index], width, position_in_long)
+
+    @staticmethod
+    def _read_bits(num, width: int, start: int):
+        # create a mask of size 'width' of 1 bits
+        mask = (2 ** width) - 1
+        # shift it out to where we need for the mask
+        mask = mask << start
+        # select the bits we need
+        comp = num & mask
+        # move them back to where they should be
+        comp = comp >> start
+
+        return comp
+
+    @staticmethod
+    def _divide_nibbles(arry):
+        rtn = []
+        f2_mask = (2 ** 4) - 1
+        f1_mask = f2_mask << 4
+        for s in arry:
+            rtn.append(s & f1_mask)
+            rtn.append(s & f2_mask)
+
+        return rtn

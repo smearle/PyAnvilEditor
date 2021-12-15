@@ -43,16 +43,19 @@ class World:
         for region_name, chunks in chunks_by_region.items():
             with open(self.world_folder / 'region' / region_name, mode='r+b') as region:
                 region.seek(0)
-                locations = [[
-                    int.from_bytes(region.read(3), byteorder='big', signed=False) * 4096,
-                    int.from_bytes(region.read(1), byteorder='big', signed=False) * 4096
-                ] for i in range(1024)]
+                locations = [
+                    [
+                        int.from_bytes(region.read(3), byteorder='big', signed=False) * 4096,
+                        int.from_bytes(region.read(1), byteorder='big', signed=False) * 4096
+                    ]
+                    for i in range(1024)
+                ]
 
                 timestamps = [int.from_bytes(region.read(4), byteorder='big', signed=False) for i in range(1024)]
 
                 data_in_file = bytearray(region.read())
 
-                chunks.sort(key=lambda chunk: locations[((chunk.xpos % Sizes.REGION_WIDTH) + (chunk.zpos % Sizes.REGION_WIDTH) * Sizes.REGION_WIDTH)][0])
+                chunks.sort(key=lambda chunk: locations[chunk.get_index()][0])
                 # print("writing chunks", [str(c) + ":" + str(locations[((chunk.xpos % Sizes.REGION_WIDTH) + (chunk.zpos % Sizes.REGION_WIDTH) * Sizes.REGION_WIDTH)][0]) for c in chunks])
 
                 for chunk in chunks:
