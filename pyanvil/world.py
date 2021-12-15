@@ -12,7 +12,7 @@ from .canvas import Canvas
 
 class Sizes(IntEnum):
     REGION_WIDTH = 32
-    CHUNK_WIDTH = 16
+    SUBCHUNK_WIDTH = 16
 
 
 class BlockState:
@@ -56,8 +56,8 @@ class Block:
 
 
 class ChunkSection:
-    def __init__(self, blocks, raw_section, y_index):
-        self.blocks = blocks
+    def __init__(self, blocks: dict[int, Block], raw_section, y_index):
+        self.blocks: dict[int, Block] = blocks
         self.raw_section = raw_section
         self.y_index = y_index
 
@@ -66,7 +66,7 @@ class ChunkSection:
         y = block_pos[1]
         z = block_pos[2]
 
-        return self.blocks[x + z * Sizes.CHUNK_WIDTH + y * Sizes.CHUNK_WIDTH ** 2]
+        return self.blocks[x + z * Sizes.SUBCHUNK_WIDTH + y * Sizes.SUBCHUNK_WIDTH ** 2]
 
     def serialize(self):
         serial_section = self.raw_section
@@ -74,7 +74,7 @@ class ChunkSection:
         if dirty:
             self.palette = list(set([b._state for b in self.blocks] + [BlockState('minecraft:air', {})]))
             self.palette.sort(key=lambda s: s.name)
-            serial_section.add_child(ByteTag(self.y_index, tag_name='Y'))
+            serial_section.add_child(ByteTag(tag_value=self.y_index, tag_name='Y'))
             mat_id_mapping = {self.palette[i]: i for i in range(len(self.palette))}
             new_palette = self._serialize_palette()
             serial_section.add_child(new_palette)
@@ -119,7 +119,7 @@ class ChunkSection:
             lng = 0
             for state in range(states_per_long):
                 # insert blocks in reverse, so first one ends up most to the right
-                block_index = long_index*states_per_long + (states_per_long - state - 1)
+                block_index = long_index * states_per_long + (states_per_long - state - 1)
 
                 if block_index < len(self.blocks):
                     block = self.blocks[block_index]
@@ -131,19 +131,19 @@ class ChunkSection:
 
 
 class Chunk:
-    def __init__(self, xpos, zpos, sections, raw_nbt, orig_size):
+    def __init__(self, xpos, zpos, sections: dict[int, ChunkSection], raw_nbt, orig_size):
         self.xpos = xpos
         self.zpos = zpos
-        self.sections = sections
+        self.sections: dict[int, ChunkSection] = sections
         self.raw_nbt = raw_nbt
         self.biomes = [Biome.from_index(i) for i in self.raw_nbt.get('Level').get('Biomes').get()]
         self.orig_size = orig_size
 
     def get_block(self, block_pos):
-        return self.get_section(block_pos[1]).get_block([n % Sizes.CHUNK_WIDTH for n in block_pos])
+        return self.get_section(block_pos[1]).get_block([n % Sizes.SUBCHUNK_WIDTH for n in block_pos])
 
-    def get_section(self, y):
-        key = int(y / Sizes.CHUNK_WIDTH)
+    def get_section(self, y) -> ChunkSection:
+        key = int(y / Sizes.SUBCHUNK_WIDTH)
         if key not in self.sections:
             self.sections[key] = ChunkSection(
                 [Block(dirty=True) for i in range(4096)],
@@ -156,12 +156,12 @@ class Chunk:
         results = []
         for sec in self.sections:
             section = self.sections[sec]
-            for x1 in range(Sizes.CHUNK_WIDTH):
-                for y1 in range(Sizes.CHUNK_WIDTH):
-                    for z1 in range(Sizes.CHUNK_WIDTH):
+            for x1 in range(Sizes.SUBCHUNK_WIDTH):
+                for y1 in range(Sizes.SUBCHUNK_WIDTH):
+                    for z1 in range(Sizes.SUBCHUNK_WIDTH):
                         if string in section.get_block((x1, y1, z1))._state.name:
                             results.append((
-                                (x1 + self.xpos * Sizes.CHUNK_WIDTH, y1 + sec * Sizes.CHUNK_WIDTH, z1 + self.zpos * Sizes.CHUNK_WIDTH),
+                                (x1 + self.xpos * Sizes.SUBCHUNK_WIDTH, y1 + sec * Sizes.SUBCHUNK_WIDTH, z1 + self.zpos * Sizes.SUBCHUNK_WIDTH),
                                 section.get_block((x1, y1, z1))
                             ))
         return results
@@ -174,9 +174,9 @@ class Chunk:
             states = []  # Sections which contain only air have no states.
             if section.has('BlockStates'):
                 flatstates = [c.get() for c in section.get('BlockStates').children]
-                pack_size = int((len(flatstates) * 64) / (Sizes.CHUNK_WIDTH ** 3))
+                pack_size = int((len(flatstates) * 64) / (Sizes.SUBCHUNK_WIDTH ** 3))
                 states = [
-                    Chunk._read_width_from_loc(flatstates, pack_size, i) for i in range(Sizes.CHUNK_WIDTH ** 3)
+                    Chunk._read_width_from_loc(flatstates, pack_size, i) for i in range(Sizes.SUBCHUNK_WIDTH ** 3)
                 ]
             palette: list[BlockState] = None
             if section.has('Palette'):
@@ -263,7 +263,7 @@ class World:
 
     def flush(self):
         self.close()
-        self.chunks = {}
+        self.chunks: dict[int, Chunk] = {}
 
     def close(self):
         chunks_by_region = {}
@@ -343,11 +343,11 @@ class World:
                 region.write((0).to_bytes(required_padding, byteorder='big', signed=False))
 
     def get_block(self, block_pos):
-        chunk_pos = self._get_chunk(block_pos)
+        chunk_pos = self._to_chunk_coordinates(block_pos)
         chunk = self.get_chunk(chunk_pos)
         return chunk.get_block(block_pos)
 
-    def get_chunk(self, chunk_pos):
+    def get_chunk(self, chunk_pos) -> Chunk:
         if chunk_pos not in self.chunks:
             self._load_chunk(chunk_pos)
 
@@ -391,8 +391,8 @@ class World:
     def _get_region_file(self, chunk_pos):
         return 'r.' + '.'.join([str(x) for x in self._get_region(chunk_pos)]) + '.mca'
 
-    def _get_chunk(self, block_pos):
-        return (math.floor(block_pos[0] / Sizes.CHUNK_WIDTH), math.floor(block_pos[2] / Sizes.CHUNK_WIDTH))
+    def _to_chunk_coordinates(self, block_pos: tuple[int, int, int]) -> tuple[int, int]:
+        return (block_pos[0] // Sizes.SUBCHUNK_WIDTH, block_pos[2] // Sizes.SUBCHUNK_WIDTH)
 
-    def _get_region(self, chunk_pos):
-        return (math.floor(chunk_pos[0] / Sizes.REGION_WIDTH), math.floor(chunk_pos[1] / Sizes.REGION_WIDTH))
+    def _get_region(self, chunk_pos: tuple[int, int]):
+        return (chunk_pos[0] // Sizes.REGION_WIDTH, chunk_pos[1] // Sizes.REGION_WIDTH)
