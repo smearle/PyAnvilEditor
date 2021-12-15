@@ -29,10 +29,10 @@ class BlockState:
 
 
 class Block:
-    def __init__(self, state, block_light, sky_light, dirty=False):
+    def __init__(self, state, block_light=0, sky_light=0, dirty=False):
         self._state = state
-        self.block_light = 0
-        self.sky_light = 0
+        self.block_light = block_light
+        self.sky_light = sky_light
         self._dirty = dirty
 
     def __str__(self):
