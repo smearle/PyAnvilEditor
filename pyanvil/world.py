@@ -2,11 +2,12 @@ import sys
 import math
 import zlib
 import time
+from enum import Enum
 from pathlib import Path
-import pyanvil.nbt as nbt
-import pyanvil.stream as stream
-from pyanvil.biomes import Biome
-from pyanvil.canvas import Canvas
+from .nbt import NBT
+from .stream import InputStream, OutputStream
+from .biomes import Biome
+from .canvas import Canvas
 
 
 class Sizes(Enum):
@@ -73,37 +74,37 @@ class ChunkSection:
         if dirty:
             self.palette = list(set([b._state for b in self.blocks] + [BlockState('minecraft:air', {})]))
             self.palette.sort(key=lambda s: s.name)
-            serial_section.add_child(nbt.ByteTag(self.y_index, tag_name='Y'))
+            serial_section.add_child(NBT.ByteTag(self.y_index, tag_name='Y'))
             mat_id_mapping = {self.palette[i]: i for i in range(len(self.palette))}
             new_palette = self._serialize_palette()
             serial_section.add_child(new_palette)
             serial_section.add_child(self._serialize_blockstates(mat_id_mapping))
 
         if not serial_section.has('SkyLight'):
-            serial_section.add_child(nbt.ByteArrayTag(tag_name='SkyLight', children=[nbt.ByteTag(-1, tag_name='None') for i in range(2048)]))
+            serial_section.add_child(NBT.ByteArrayTag(tag_name='SkyLight', children=[NBT.ByteTag(-1, tag_name='None') for i in range(2048)]))
 
         if not serial_section.has('BlockLight'):
-            serial_section.add_child(nbt.ByteArrayTag(tag_name='BlockLight', children=[nbt.ByteTag(-1, tag_name='None') for i in range(2048)]))
+            serial_section.add_child(NBT.ByteArrayTag(tag_name='BlockLight', children=[NBT.ByteTag(-1, tag_name='None') for i in range(2048)]))
 
         return serial_section
 
     def _serialize_palette(self):
-        serial_palette = nbt.ListTag(nbt.CompoundTag.clazz_id, tag_name='Palette')
+        serial_palette = NBT.ListTag(NBT.CompoundTag.clazz_id, tag_name='Palette')
         for state in self.palette:
-            palette_item = nbt.CompoundTag(tag_name='None', children=[
-                nbt.StringTag(state.name, tag_name='Name')
+            palette_item = NBT.CompoundTag(tag_name='None', children=[
+                NBT.StringTag(state.name, tag_name='Name')
             ])
             if len(state.props) != 0:
-                serial_props = nbt.CompoundTag(tag_name='Properties')
+                serial_props = NBT.CompoundTag(tag_name='Properties')
                 for name, val in state.props.items():
-                    serial_props.add_child(nbt.StringTag(str(val), tag_name=name))
+                    serial_props.add_child(NBT.StringTag(str(val), tag_name=name))
                 palette_item.add_child(serial_props)
             serial_palette.add_child(palette_item)
 
         return serial_palette
 
     def _serialize_blockstates(self, state_mapping):
-        serial_states = nbt.LongArrayTag(tag_name='BlockStates')
+        serial_states = NBT.LongArrayTag(tag_name='BlockStates')
         width = math.ceil(math.log(len(self.palette), 2))
         if width < 4:
             width = 4
@@ -125,7 +126,7 @@ class ChunkSection:
                     lng = (lng << width) + state_mapping[block._state]
 
             lng = int.from_bytes(lng.to_bytes(8, byteorder='big', signed=False), byteorder='big', signed=True)
-            serial_states.add_child(nbt.LongTag(lng))
+            serial_states.add_child(NBT.LongTag(lng))
         return serial_states
 
 
@@ -146,7 +147,7 @@ class Chunk:
         if key not in self.sections:
             self.sections[key] = ChunkSection(
                 [Block(dirty=True) for i in range(4096)],
-                nbt.CompoundTag(),
+                NBT.CompoundTag(),
                 key
             )
         return self.sections[key]
@@ -207,7 +208,7 @@ class Chunk:
         return rtn
 
     def pack(self):
-        new_sections = nbt.ListTag(nbt.CompoundTag.clazz_id, tag_name='Sections', children=[
+        new_sections = NBT.ListTag(NBT.CompoundTag.clazz_id, tag_name='Sections', children=[
             self.sections[sec].serialize() for sec in self.sections
         ])
         new_nbt = self.raw_nbt.clone()
@@ -288,7 +289,7 @@ class World:
                 # print("writing chunks", [str(c) + ":" + str(locations[((chunk.xpos % Sizes.REGION_WIDTH) + (chunk.zpos % Sizes.REGION_WIDTH) * Sizes.REGION_WIDTH)][0]) for c in chunks])
 
                 for chunk in chunks:
-                    strm = stream.OutputStream()
+                    strm = OutputStream()
                     chunkNBT = chunk.pack()
                     chunkNBT.serialize(strm)
                     data = zlib.compress(strm.get_data())
@@ -376,7 +377,7 @@ class World:
         compr = region_file.read(1)
         # print(region_file.tell()-5, datalen)
         decompressed = zlib.decompress(region_file.read(datalen-1))
-        data = nbt.parse_nbt(stream.InputStream(decompressed))
+        data = NBT.parse_nbt(InputStream(decompressed))
         chunk_pos = (data.get('Level').get('xPos').get(), data.get('Level').get('zPos').get())
         chunk = Chunk(
             chunk_pos[0],
@@ -393,5 +394,5 @@ class World:
     def _get_chunk(self, block_pos):
         return (math.floor(block_pos[0] / Sizes.CHUNK_WIDTH), math.floor(block_pos[2] / Sizes.CHUNK_WIDTH))
 
-    def _get_region(self, chunk_pos: Coordinate2D):
-        return (math.floor(chunk_pos.x / Sizes.REGION_WIDTH), math.floor(chunk_pos.z / Sizes.REGION_WIDTH))
+    def _get_region(self, chunk_pos):
+        return (math.floor(chunk_pos[0] / Sizes.REGION_WIDTH), math.floor(chunk_pos[1] / Sizes.REGION_WIDTH))

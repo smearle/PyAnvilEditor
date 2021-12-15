@@ -1,5 +1,5 @@
 import math
-from pyanvil.schematic import Schematic
+from .schematic import Schematic
 
 
 class WorldTask:
