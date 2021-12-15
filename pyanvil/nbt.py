@@ -1,14 +1,17 @@
-import struct, sys
+import struct
+
 
 def write_string(stream, string):
     stream.write(len(string).to_bytes(2, byteorder='big', signed=False))
     for c in string:
         stream.write(ord(c).to_bytes(1, byteorder='big', signed=False))
 
+
 def register_parser(id, clazz):
     global _parsers
 
     _parsers[id] = clazz
+
 
 def create_simple_nbt_class(tag_id, class_tag_name, tag_width, tag_parser):
 
@@ -23,7 +26,7 @@ def create_simple_nbt_class(tag_id, class_tag_name, tag_width, tag_parser):
         def parse(cls, stream, name):
             return cls(
                 tag_value=struct.unpack(
-                    cls.clazz_parser, 
+                    cls.clazz_parser,
                     stream.read(cls.clazz_width)
                 )[0],
                 tag_name=name
@@ -63,6 +66,7 @@ def create_simple_nbt_class(tag_id, class_tag_name, tag_width, tag_parser):
 
     return DataNBTTag
 
+
 def create_string_nbt_class(tag_id):
     class DataNBTTag:
 
@@ -91,8 +95,8 @@ def create_string_nbt_class(tag_id):
             if include_name:
                 stream.write(type(self).clazz_id.to_bytes(1, byteorder='big', signed=False))
                 write_string(stream, self.tag_name)
-            
-            stream.write(len(self.tag_value).to_bytes(2, byteorder='big',signed=False))
+
+            stream.write(len(self.tag_value).to_bytes(2, byteorder='big', signed=False))
             for c in self.tag_value:
                 stream.write(ord(c).to_bytes(1, byteorder='big', signed=False))
 
@@ -108,6 +112,7 @@ def create_string_nbt_class(tag_id):
     register_parser(tag_id, DataNBTTag)
 
     return DataNBTTag
+
 
 def create_array_nbt_class(tag_id, tag_name, sub_type):
     class ArrayNBTTag:
@@ -127,7 +132,7 @@ def create_array_nbt_class(tag_id, tag_name, sub_type):
         def __init__(self, tag_name='None', children=[]):
             self.tag_name = tag_name
             self.children = children[:]
-        
+
         def add_child(self, tag):
             self.children.append(tag)
 
@@ -145,7 +150,7 @@ def create_array_nbt_class(tag_id, tag_name, sub_type):
             if include_name:
                 stream.write(type(self).clazz_id.to_bytes(1, byteorder='big', signed=False))
                 write_string(stream, self.tag_name)
-                
+
             stream.write(len(self.children).to_bytes(4, byteorder='big', signed=True))
 
             for tag in self.children:
@@ -167,6 +172,7 @@ def create_array_nbt_class(tag_id, tag_name, sub_type):
 
     return ArrayNBTTag
 
+
 def create_list_nbt_class(tag_id):
     class ListNBTTag:
 
@@ -187,7 +193,7 @@ def create_list_nbt_class(tag_id):
             self.tag_name = tag_name
             self.sub_type_id = sub_type_id
             self.children = children[:]
-        
+
         def add_child(self, tag):
             self.children.append(tag)
 
@@ -201,12 +207,12 @@ def create_list_nbt_class(tag_id):
             print(indent + 'List: ' + self.tag_name + ' size ' + str(len(self.children)))
             for c in self.children:
                 c.print(indent + '  ')
-        
+
         def serialize(self, stream, include_name=True):
             if include_name:
                 stream.write(type(self).clazz_id.to_bytes(1, byteorder='big', signed=False))
                 write_string(stream, self.tag_name)
-            
+
             stream.write(self.sub_type_id.to_bytes(1, byteorder='big', signed=False))
             stream.write(len(self.children).to_bytes(4, byteorder='big', signed=True))
 
@@ -229,6 +235,7 @@ def create_list_nbt_class(tag_id):
 
     return ListNBTTag
 
+
 def create_compund_nbt_class(tag_id):
     class CompundNBTTag:
 
@@ -237,15 +244,15 @@ def create_compund_nbt_class(tag_id):
         @classmethod
         def parse(cls, stream, name):
             tag = cls(tag_name=name)
-            while stream.peek() != 0: # end tag
+            while stream.peek() != 0:  # end tag
                 tag.add_child(parse_nbt(stream))
-            stream.read(1) # get rid of the end tag
+            stream.read(1)  # get rid of the end tag
             return tag
 
         def __init__(self, tag_name='None', children=[]):
             self.tag_name = tag_name
-            self.children = { c.tag_name: c for c in children[:] }
-        
+            self.children = {c.tag_name: c for c in children[:]}
+
         def add_child(self, tag):
             self.children[tag.tag_name] = tag
 
@@ -276,10 +283,10 @@ def create_compund_nbt_class(tag_id):
             if include_name:
                 stream.write(type(self).clazz_id.to_bytes(1, byteorder='big', signed=False))
                 write_string(stream, self.tag_name)
-            
+
             for tag_name in self.children:
                 self.children[tag_name].serialize(stream, include_name=True)
-            
+
             stream.write((0).to_bytes(1, byteorder='big', signed=False))
 
         def clone(self):
@@ -304,6 +311,7 @@ def create_compund_nbt_class(tag_id):
 
     return CompundNBTTag
 
+
 _parsers = {}
 
 ByteTag = create_simple_nbt_class(1, 'Byte', 1, '>b')
@@ -322,6 +330,7 @@ CompoundTag = create_compund_nbt_class(10)
 IntArrayTag = create_array_nbt_class(11, 'IntArray', IntTag)
 LongArrayTag = create_array_nbt_class(12, 'LongArray', LongTag)
 
+
 def parse_nbt(stream):
     global _parsers
 
@@ -330,4 +339,3 @@ def parse_nbt(stream):
     tag_name = stream.read(tag_name_length).decode('utf-8')
 
     return _parsers[tag_type].parse(stream, tag_name)
-

@@ -1,5 +1,4 @@
 #!/bin/python3
-import sys
 from pyanvil import World, BlockState, Material
 
 with World('A', save_location='/home/dallen/.minecraft/saves', debug=True) as wrld:

@@ -1,9 +1,13 @@
-import sys, math, gzip, zlib, time, os
+import sys
+import math
+import zlib
+import time
 from pathlib import Path
 import pyanvil.nbt as nbt
 import pyanvil.stream as stream
 from pyanvil.biomes import Biome
 from pyanvil.canvas import Canvas
+
 
 class BlockState:
     def __init__(self, name, props):
@@ -22,6 +26,7 @@ class BlockState:
 
     def clone(self):
         return BlockState(self.name, self.props.copy())
+
 
 class Block:
     def __init__(self, state, block_light, sky_light, dirty=False):
@@ -43,6 +48,7 @@ class Block:
     def get_state(self):
         return self._state.clone()
 
+
 class ChunkSection:
     def __init__(self, blocks, raw_section, y_index):
         self.blocks = blocks
@@ -60,14 +66,14 @@ class ChunkSection:
         serial_section = self.raw_section
         dirty = any([b._dirty for b in self.blocks])
         if dirty:
-            self.palette = list(set([ b._state for b in self.blocks ] + [ BlockState('minecraft:air', {}) ]))
+            self.palette = list(set([b._state for b in self.blocks] + [BlockState('minecraft:air', {})]))
             self.palette.sort(key=lambda s: s.name)
             serial_section.add_child(nbt.ByteTag(self.y_index, tag_name='Y'))
             mat_id_mapping = {self.palette[i]: i for i in range(len(self.palette))}
             new_palette = self._serialize_palette()
             serial_section.add_child(new_palette)
             serial_section.add_child(self._serialize_blockstates(mat_id_mapping))
-        
+
         if not serial_section.has('SkyLight'):
             serial_section.add_child(nbt.ByteArrayTag(tag_name='SkyLight', children=[nbt.ByteTag(-1, tag_name='None') for i in range(2048)]))
 
@@ -88,7 +94,7 @@ class ChunkSection:
                     serial_props.add_child(nbt.StringTag(str(val), tag_name=name))
                 palette_item.add_child(serial_props)
             serial_palette.add_child(palette_item)
-        
+
         return serial_palette
 
     def _serialize_blockstates(self, state_mapping):
@@ -108,6 +114,7 @@ class ChunkSection:
             data = data >> 64
         return serial_states
 
+
 class Chunk:
     def __init__(self, xpos, zpos, sections, raw_nbt, orig_size):
         self.xpos = xpos
@@ -116,7 +123,7 @@ class Chunk:
         self.raw_nbt = raw_nbt
         self.biomes = [Biome.from_index(i) for i in self.raw_nbt.get('Level').get('Biomes').get()]
         self.orig_size = orig_size
-        
+
     def get_block(self, block_pos):
         return self.get_section(block_pos[1]).get_block([n % 16 for n in block_pos])
 
@@ -139,12 +146,12 @@ class Chunk:
                     for z1 in range(16):
                         if string in section.get_block((x1, y1, z1))._state.name:
                             results.append((
-                                (x1 + self.xpos * 16, y1 + sec * 16, z1 + self.zpos * 16), 
+                                (x1 + self.xpos * 16, y1 + sec * 16, z1 + self.zpos * 16),
                                 section.get_block((x1, y1, z1))
                             ))
         return results
 
-    # Blockstates are packed based on the number of values in the pallet. 
+    # Blockstates are packed based on the number of values in the pallet.
     # This selects the pack size, then splits out the ids
     def unpack(raw_nbt):
         sections = {}
@@ -159,7 +166,7 @@ class Chunk:
                 # Sections which contain only air have no states.
                 states = []
             if section.has('Palette'):
-                palette = [ 
+                palette = [
                     BlockState(
                         state.get('Name').get(),
                         state.get('Properties').to_dict() if state.has('Properties') else {}
@@ -230,6 +237,7 @@ class Chunk:
     def __str__(self):
         return f'Chunk({str(self.xpos)},{str(self.zpos)})'
 
+
 class World:
     def __init__(self, world_folder, save_location=None, debug=False, read=True, write=True):
         self.debug = debug
@@ -243,7 +251,7 @@ class World:
 
     def __enter__(self):
         return self
-    
+
     def __exit__(self, typ, val, trace):
         if typ is None:
             self.close()
@@ -264,9 +272,9 @@ class World:
             with open(self.world_folder / 'region' / region_name, mode='r+b') as region:
                 region.seek(0)
                 locations = [[
-                            int.from_bytes(region.read(3), byteorder='big', signed=False) * 4096, 
-                            int.from_bytes(region.read(1), byteorder='big', signed=False) * 4096
-                        ] for i in range(1024) ]
+                    int.from_bytes(region.read(3), byteorder='big', signed=False) * 4096,
+                    int.from_bytes(region.read(1), byteorder='big', signed=False) * 4096
+                ] for i in range(1024)]
 
                 timestamps = [int.from_bytes(region.read(4), byteorder='big', signed=False) for i in range(1024)]
 
@@ -345,15 +353,15 @@ class World:
     def _load_chunk(self, chunk_pos):
         with open(self.world_folder / 'region' / self._get_region_file(chunk_pos), mode='rb') as region:
             locations = [[
-                        int.from_bytes(region.read(3), byteorder='big', signed=False) * 4096, 
-                        int.from_bytes(region.read(1), byteorder='big', signed=False) * 4096
-                    ] for i in range(1024) ]
+                int.from_bytes(region.read(3), byteorder='big', signed=False) * 4096,
+                int.from_bytes(region.read(1), byteorder='big', signed=False) * 4096
+            ] for i in range(1024)]
 
             timestamps = region.read(4096)
 
             loc = locations[((chunk_pos[0] % 32) + (chunk_pos[1] % 32) * 32)]
             if self.debug:
-                print('Loading', chunk_pos,'from', region.name)
+                print('Loading', chunk_pos, 'from', region.name)
             chunk = self._load_binary_chunk_at(region, loc[0], loc[1])
             self.chunks[chunk_pos] = chunk
 

@@ -1,5 +1,6 @@
 from pyanvil.stream import InputStream, OutputStream
 
+
 class TestInputStream:
 
     def test_reading_data(args):
@@ -16,6 +17,7 @@ class TestInputStream:
         peek_space = stream.peek()
         assert read_hello == b'Hello'
         assert peek_space == 32
+
 
 class TestOutputStream:
 

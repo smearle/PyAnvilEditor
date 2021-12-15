@@ -1,10 +1,12 @@
-import sys, math
+import math
 from pyanvil.schematic import Schematic
+
 
 class WorldTask:
     def __init__(self, location, new_state):
         self.location = location
         self.new_state = new_state
+
 
 class Canvas:
 
@@ -20,7 +22,7 @@ class Canvas:
             self.work_queue.append(WorldTask(b, my_state))
 
         self.selection.clear()
-        
+
         if self.auto_commit:
             self.commit()
 
