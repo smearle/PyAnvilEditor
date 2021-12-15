@@ -9,6 +9,12 @@ from pyanvil.biomes import Biome
 from pyanvil.canvas import Canvas
 
 
+
+class Sizes(Enum):
+    REGION_WIDTH = 32
+    CHUNK_WIDTH = 16
+
+
 class BlockState:
     def __init__(self, name, props):
         self.name = name
@@ -60,7 +66,7 @@ class ChunkSection:
         y = block_pos[1]
         z = block_pos[2]
 
-        return self.blocks[x + z * 16 + y * 16 ** 2]
+        return self.blocks[x + z * Sizes.CHUNK_WIDTH + y * Sizes.CHUNK_WIDTH ** 2]
 
     def serialize(self):
         serial_section = self.raw_section
@@ -125,10 +131,10 @@ class Chunk:
         self.orig_size = orig_size
 
     def get_block(self, block_pos):
-        return self.get_section(block_pos[1]).get_block([n % 16 for n in block_pos])
+        return self.get_section(block_pos[1]).get_block([n % Sizes.CHUNK_WIDTH for n in block_pos])
 
     def get_section(self, y):
-        key = int(y/16)
+        key = int(y / Sizes.CHUNK_WIDTH)
         if key not in self.sections:
             self.sections[key] = ChunkSection(
                 [Block(BlockState('minecraft:air', {}), 0, 0, dirty=True) for i in range(4096)],
@@ -141,12 +147,12 @@ class Chunk:
         results = []
         for sec in self.sections:
             section = self.sections[sec]
-            for x1 in range(16):
-                for y1 in range(16):
-                    for z1 in range(16):
+            for x1 in range(Sizes.CHUNK_WIDTH):
+                for y1 in range(Sizes.CHUNK_WIDTH):
+                    for z1 in range(Sizes.CHUNK_WIDTH):
                         if string in section.get_block((x1, y1, z1))._state.name:
                             results.append((
-                                (x1 + self.xpos * 16, y1 + sec * 16, z1 + self.zpos * 16),
+                                (x1 + self.xpos * Sizes.CHUNK_WIDTH, y1 + sec * Sizes.CHUNK_WIDTH, z1 + self.zpos * Sizes.CHUNK_WIDTH),
                                 section.get_block((x1, y1, z1))
                             ))
         return results
@@ -158,9 +164,9 @@ class Chunk:
         for section in raw_nbt.get('Level').get('Sections').children:
             if section.has('BlockStates'):
                 flatstates = [c.get() for c in section.get('BlockStates').children]
-                pack_size = int((len(flatstates) * 64) / (16**3))
+                pack_size = int((len(flatstates) * 64) / (Sizes.CHUNK_WIDTH ** 3))
                 states = [
-                    Chunk._read_width_from_loc(flatstates, pack_size, i) for i in range(16**3)
+                    Chunk._read_width_from_loc(flatstates, pack_size, i) for i in range(Sizes.CHUNK_WIDTH ** 3)
                 ]
             else:
                 # Sections which contain only air have no states.
@@ -280,8 +286,8 @@ class World:
 
                 data_in_file = bytearray(region.read())
 
-                chunks.sort(key=lambda chunk: locations[((chunk.xpos % 32) + (chunk.zpos % 32) * 32)][0])
-                # print("writing chunks", [str(c) + ":" + str(locations[((chunk.xpos % 32) + (chunk.zpos % 32) * 32)][0]) for c in chunks])
+                chunks.sort(key=lambda chunk: locations[((chunk.xpos % Sizes.REGION_WIDTH) + (chunk.zpos % Sizes.REGION_WIDTH) * Sizes.REGION_WIDTH)][0])
+                # print("writing chunks", [str(c) + ":" + str(locations[((chunk.xpos % Sizes.REGION_WIDTH) + (chunk.zpos % Sizes.REGION_WIDTH) * Sizes.REGION_WIDTH)][0]) for c in chunks])
 
                 for chunk in chunks:
                     strm = stream.OutputStream()
@@ -290,7 +296,7 @@ class World:
                     data = zlib.compress(strm.get_data())
                     datalen = len(data)
                     block_data_len = math.ceil((datalen + 5) / 4096.0) * 4096
-                    chunk_index = (chunk.xpos % 32) + (chunk.zpos % 32) * 32
+                    chunk_index = (chunk.xpos % Sizes.REGION_WIDTH) + (chunk.zpos % Sizes.REGION_WIDTH) * Sizes.REGION_WIDTH
                     # Constuct new data block
                     data = (datalen + 1).to_bytes(4, byteorder='big', signed=False) + \
                         (2).to_bytes(length=1, byteorder='big', signed=False) + \
@@ -360,7 +366,7 @@ class World:
 
             timestamps = region.read(4096)
 
-            loc = locations[((chunk_pos[0] % 32) + (chunk_pos[1] % 32) * 32)]
+            loc = locations[((chunk_pos[0] % Sizes.REGION_WIDTH) + (chunk_pos[1] % Sizes.REGION_WIDTH) * Sizes.REGION_WIDTH)]
             if self.debug:
                 print('Loading', chunk_pos, 'from', region.name)
             chunk = self._load_binary_chunk_at(region, loc[0], loc[1])
@@ -387,7 +393,7 @@ class World:
         return 'r.' + '.'.join([str(x) for x in self._get_region(chunk_pos)]) + '.mca'
 
     def _get_chunk(self, block_pos):
-        return (math.floor(block_pos[0] / 16), math.floor(block_pos[2] / 16))
+        return (math.floor(block_pos[0] / Sizes.CHUNK_WIDTH), math.floor(block_pos[2] / Sizes.CHUNK_WIDTH))
 
-    def _get_region(self, chunk_pos):
-        return (math.floor(chunk_pos[0] / 32), math.floor(chunk_pos[1] / 32))
+    def _get_region(self, chunk_pos: Coordinate2D):
+        return (math.floor(chunk_pos.x / Sizes.REGION_WIDTH), math.floor(chunk_pos.z / Sizes.REGION_WIDTH))
