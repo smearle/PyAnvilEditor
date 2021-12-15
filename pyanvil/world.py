@@ -8,30 +8,12 @@ from .nbt import *
 from .stream import InputStream, OutputStream
 from .biomes import Biome
 from .canvas import Canvas
+from .components import BlockState
 
 
 class Sizes(IntEnum):
     REGION_WIDTH = 32
     SUBCHUNK_WIDTH = 16
-
-
-class BlockState:
-    def __init__(self, name: str = 'minecraft:air', props: map = {}):
-        self.name = name
-        self.props = props
-        self.id = None
-
-    def __str__(self):
-        return f'BlockState({self.name}, {str(self.props)})'
-
-    def __hash__(self):
-        return hash(self.name)
-
-    def __eq__(self, other):
-        return self.name == other.name and self.props == other.props
-
-    def clone(self):
-        return BlockState(self.name, self.props.copy())
 
 
 class Block:
