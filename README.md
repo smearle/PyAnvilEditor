@@ -73,3 +73,9 @@ with world.World('myWorld') as myWorld:
 
 # Once the world is closed, the changes have been saved and can be viewed in game
 ```
+
+---
+## Technical sources
+- [Region file structure 1](https://wiki.vg/Region_Files)
+- [Region file structure 2](https://minecraft.fandom.com/el/wiki/Region_file_format)
+- [Chunk NBT components](https://minecraft.fandom.com/wiki/Chunk_format)

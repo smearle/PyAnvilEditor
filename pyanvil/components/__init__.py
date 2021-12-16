@@ -10,3 +10,4 @@ from .block import Block
 from .constants import Sizes
 from .chunk_section import ChunkSection
 from .chunk import Chunk
+from .region import Region

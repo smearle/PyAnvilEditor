@@ -1,8 +1,11 @@
+from io import FileIO
 import sys
 import math
 import zlib
 import time
 from pathlib import Path
+
+from pyanvil.components.region import Region
 from .utility.nbt import NBT
 from .stream import InputStream, OutputStream
 from .canvas import Canvas
@@ -127,27 +130,19 @@ class World:
         return Canvas(self)
 
     def _load_chunk(self, chunk_pos):
-        with open(self.world_folder / 'region' / self._get_region_file_name(chunk_pos), mode='rb') as region_file:
-            # 3B offset
-            # 1B size
-            locations = [[
-                int.from_bytes(region_file.read(3), byteorder='big', signed=False) * 4096,
-                int.from_bytes(region_file.read(1), byteorder='big', signed=False) * 4096
-            ] for i in range(1024)]
-
-            timestamps = region_file.read(4096)
-
-            loc = locations[((chunk_pos[0] % Sizes.REGION_WIDTH) + (chunk_pos[1] % Sizes.REGION_WIDTH) * Sizes.REGION_WIDTH)]
+        file_name = self._get_region_file_name(chunk_pos)
+        with Region(self.world_folder / 'region' / file_name) as region:
+            loc = region.chunk_locations[((chunk_pos[0] % Sizes.REGION_WIDTH) + (chunk_pos[1] % Sizes.REGION_WIDTH) * Sizes.REGION_WIDTH)]
             if self.debug:
-                print('Loading', chunk_pos, 'from', region_file.name)
-            chunk = self._load_binary_chunk_at(region_file, loc[0], loc[1])
+                print('Loading', chunk_pos, 'from', file_name)
+            chunk = World._load_binary_chunk_at(region, offset=loc[0], max_size=loc[1])
             self.chunks[chunk_pos] = chunk
 
-    def _load_binary_chunk_at(self, region_file, offset, max_size) -> Chunk:
+    @staticmethod
+    def _load_binary_chunk_at(region_file: FileIO, offset, max_size) -> Chunk:
         region_file.seek(offset)
         datalen = int.from_bytes(region_file.read(4), byteorder='big', signed=False)
-        compr = region_file.read(1)
-        # print(region_file.tell()-5, datalen)
+        region_file.read(1)  # Compression scheme
         decompressed = zlib.decompress(region_file.read(datalen - 1))
         data = NBT.parse_nbt(InputStream(decompressed))
         chunk_pos = (data.get('Level').get('xPos').get(), data.get('Level').get('zPos').get())
