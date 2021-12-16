@@ -13,13 +13,21 @@ class Chunk:
         self.raw_nbt = raw_nbt
         self.biomes = [Biome.from_index(i) for i in self.raw_nbt.get('Level').get('Biomes').get()]
         self.orig_size = orig_size
-        self.index = (self.xpos % Sizes.REGION_WIDTH) + (self.zpos % Sizes.REGION_WIDTH) * Sizes.REGION_WIDTH
+        self.index = Chunk.to_region_chunk_index(xpos, zpos)
 
     def get_index(self):
         return self.index
 
+    @staticmethod
+    def to_region_chunk_index(x, z):
+        return (x % Sizes.REGION_WIDTH) + (z % Sizes.REGION_WIDTH) * Sizes.REGION_WIDTH
+
     def get_block(self, block_pos):
-        return self.get_section(block_pos[1]).get_block([n % Sizes.SUBCHUNK_WIDTH for n in block_pos])
+        return self.get_section(block_pos[1]).get_block(
+            [
+                n % Sizes.SUBCHUNK_WIDTH for n in block_pos
+            ]
+        )
 
     def get_section(self, y) -> ChunkSection:
         key = int(y / Sizes.SUBCHUNK_WIDTH)
@@ -39,10 +47,16 @@ class Chunk:
                 for y1 in range(Sizes.SUBCHUNK_WIDTH):
                     for z1 in range(Sizes.SUBCHUNK_WIDTH):
                         if string in section.get_block((x1, y1, z1))._state.name:
-                            results.append((
-                                (x1 + self.xpos * Sizes.SUBCHUNK_WIDTH, y1 + sec * Sizes.SUBCHUNK_WIDTH, z1 + self.zpos * Sizes.SUBCHUNK_WIDTH),
-                                section.get_block((x1, y1, z1))
-                            ))
+                            results.append(
+                                (
+                                    (
+                                        x1 + self.xpos * Sizes.SUBCHUNK_WIDTH,
+                                        y1 + sec * Sizes.SUBCHUNK_WIDTH,
+                                        z1 + self.zpos * Sizes.SUBCHUNK_WIDTH,
+                                    ),
+                                    section.get_block((x1, y1, z1)),
+                                )
+                            )
         return results
 
     # Blockstates are packed based on the number of values in the pallet.
@@ -55,9 +69,11 @@ class Chunk:
         return sections
 
     def pack(self):
-        new_sections = ListTag(CompoundTag.clazz_id, tag_name='Sections', children=[
-            self.sections[sec].serialize() for sec in self.sections
-        ])
+        new_sections = ListTag(
+            CompoundTag.clazz_id,
+            tag_name='Sections',
+            children=[self.sections[sec].serialize() for sec in self.sections]
+        )
         new_nbt = self.raw_nbt.clone()
         new_nbt.get('Level').add_child(new_sections)
 
