@@ -1,6 +1,7 @@
+from abc import ABC, abstractmethod
 import struct
 from enum import IntEnum
-from ..stream import InputStream
+from ..stream import InputStream, OutputStream
 
 
 class TagType(IntEnum):
@@ -17,6 +18,12 @@ class TagType(IntEnum):
     COMPOUND = 10
     INT_ARRAY = 11
     LONG_ARRAY = 12
+
+
+class BaseNBTTag(ABC):
+    @abstractmethod
+    def serialize(self, stream: OutputStream, include_name=True):
+        pass
 
 
 class NBT:
@@ -36,7 +43,7 @@ class NBT:
     @staticmethod
     def create_simple_nbt_class(tag_id, class_tag_name, tag_width, tag_parser):
 
-        class DataNBTTag:
+        class DataNBTTag(BaseNBTTag):
 
             clazz_width = tag_width
             clazz_name = class_tag_name
@@ -89,7 +96,7 @@ class NBT:
 
     @staticmethod
     def create_string_nbt_class(tag_id):
-        class DataNBTTag:
+        class DataNBTTag(BaseNBTTag):
 
             clazz_id = tag_id
 
@@ -136,7 +143,7 @@ class NBT:
 
     @staticmethod
     def create_array_nbt_class(tag_id, tag_name, sub_type):
-        class ArrayNBTTag:
+        class ArrayNBTTag(BaseNBTTag):
 
             clazz_sub_type = sub_type
             clazz_name = tag_name
@@ -195,7 +202,7 @@ class NBT:
 
     @staticmethod
     def create_list_nbt_class(tag_id):
-        class ListNBTTag:
+        class ListNBTTag(BaseNBTTag):
 
             clazz_id = tag_id
 
@@ -256,7 +263,7 @@ class NBT:
 
     @staticmethod
     def create_compund_nbt_class(tag_id):
-        class CompundNBTTag:
+        class CompundNBTTag(BaseNBTTag):
 
             clazz_id = tag_id
 
