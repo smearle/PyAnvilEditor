@@ -1,4 +1,3 @@
-from io import FileIO
 import sys
 import math
 import zlib
@@ -7,7 +6,7 @@ from pathlib import Path
 
 from pyanvil.components.region import Region
 from .utility.nbt import NBT
-from .stream import InputStream, OutputStream
+from .stream import OutputStream
 from .canvas import Canvas
 from .components import Sizes, Chunk
 
@@ -37,25 +36,25 @@ class World:
     def close(self):
         chunks_by_region: dict[str, list[Chunk]] = {}
         for chunk_pos, chunk in self.chunks.items():
-            region = self._get_region_file_name(chunk_pos)
-            if region not in chunks_by_region:
-                chunks_by_region[region] = []
-            chunks_by_region[region].append(chunk)
+            region_file = self._get_region_file_name(chunk_pos)
+            if region_file not in chunks_by_region:
+                chunks_by_region[region_file] = []
+            chunks_by_region[region_file].append(chunk)
 
         for region_name, chunks in chunks_by_region.items():
-            with open(self.world_folder / 'region' / region_name, mode='r+b') as region:
-                region.seek(0)
+            with open(self.world_folder / 'region' / region_name, mode='r+b') as region_file:
+                region_file.seek(0)
                 locations = [
                     [
-                        int.from_bytes(region.read(3), byteorder='big', signed=False) * 4096,
-                        int.from_bytes(region.read(1), byteorder='big', signed=False) * 4096
+                        int.from_bytes(region_file.read(3), byteorder='big', signed=False) * 4096,
+                        int.from_bytes(region_file.read(1), byteorder='big', signed=False) * 4096
                     ]
                     for i in range(1024)
                 ]
 
-                timestamps = [int.from_bytes(region.read(4), byteorder='big', signed=False) for i in range(1024)]
+                timestamps = [int.from_bytes(region_file.read(4), byteorder='big', signed=False) for i in range(1024)]
 
-                data_in_file = bytearray(region.read())
+                data_in_file = bytearray(region_file.read())
 
                 chunks.sort(key=lambda chunk: locations[chunk.index][0])
                 # print("writing chunks", [str(c) + ":" + str(locations[((chunk.xpos % Sizes.REGION_WIDTH) + (chunk.zpos % Sizes.REGION_WIDTH) * Sizes.REGION_WIDTH)][0]) for c in chunks])
@@ -100,20 +99,20 @@ class World:
                         print(f'Saving {chunk} with', {'loc': loc, 'new_len': datalen, 'old_len': chunk.orig_size, 'sector_len': block_data_len})
 
                 # rewrite entire file with new chunks and locations recorded
-                region.seek(0)
+                region_file.seek(0)
 
                 for c_loc in locations:
-                    region.write(int(c_loc[0] / 4096).to_bytes(3, byteorder='big', signed=False))
-                    region.write(int(c_loc[1] / 4096).to_bytes(1, byteorder='big', signed=False))
+                    region_file.write(int(c_loc[0] / 4096).to_bytes(3, byteorder='big', signed=False))
+                    region_file.write(int(c_loc[1] / 4096).to_bytes(1, byteorder='big', signed=False))
 
                 for ts in timestamps:
-                    region.write(ts.to_bytes(4, byteorder='big', signed=False))
+                    region_file.write(ts.to_bytes(4, byteorder='big', signed=False))
 
-                region.write(data_in_file)
+                region_file.write(data_in_file)
 
-                required_padding = (math.ceil(region.tell() / 4096.0) * 4096) - region.tell()
+                required_padding = (math.ceil(region_file.tell() / 4096.0) * 4096) - region_file.tell()
 
-                region.write((0).to_bytes(required_padding, byteorder='big', signed=False))
+                region_file.write((0).to_bytes(required_padding, byteorder='big', signed=False))
 
     def get_block(self, block_pos):
         chunk_pos = self._to_chunk_coordinates(block_pos)
