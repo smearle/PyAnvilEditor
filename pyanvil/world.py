@@ -2,7 +2,6 @@ import sys
 import math
 import zlib
 import time
-from enum import IntEnum
 from pathlib import Path
 from .utility.nbt import NBT
 from .stream import InputStream, OutputStream
@@ -33,9 +32,9 @@ class World:
         self.chunks: dict[int, Chunk] = {}
 
     def close(self):
-        chunks_by_region = {}
+        chunks_by_region: dict[str, list[Chunk]] = {}
         for chunk_pos, chunk in self.chunks.items():
-            region = self._get_region_file(chunk_pos)
+            region = self._get_region_file_name(chunk_pos)
             if region not in chunks_by_region:
                 chunks_by_region[region] = []
             chunks_by_region[region].append(chunk)
@@ -59,20 +58,21 @@ class World:
                 # print("writing chunks", [str(c) + ":" + str(locations[((chunk.xpos % Sizes.REGION_WIDTH) + (chunk.zpos % Sizes.REGION_WIDTH) * Sizes.REGION_WIDTH)][0]) for c in chunks])
 
                 for chunk in chunks:
+                    chunk_index = chunk.get_index()
                     strm = OutputStream()
+                    timestamps[chunk_index] = int(time.time())
+
                     chunkNBT = chunk.pack()
                     chunkNBT.serialize(strm)
                     data = zlib.compress(strm.get_data())
                     datalen = len(data)
                     block_data_len = math.ceil((datalen + 5) / 4096.0) * 4096
-                    chunk_index = (chunk.xpos % Sizes.REGION_WIDTH) + (chunk.zpos % Sizes.REGION_WIDTH) * Sizes.REGION_WIDTH
+
                     # Constuct new data block
                     data = (datalen + 1).to_bytes(4, byteorder='big', signed=False) + \
                         (2).to_bytes(length=1, byteorder='big', signed=False) + \
                         data + \
                         (0).to_bytes(block_data_len - (datalen + 5), byteorder='big', signed=False)
-
-                    timestamps[chunk_index] = int(time.time())
 
                     loc = locations[chunk_index]
                     original_sector_length = loc[1]
@@ -127,18 +127,20 @@ class World:
         return Canvas(self)
 
     def _load_chunk(self, chunk_pos):
-        with open(self.world_folder / 'region' / self._get_region_file(chunk_pos), mode='rb') as region:
+        with open(self.world_folder / 'region' / self._get_region_file_name(chunk_pos), mode='rb') as region_file:
+            # 3B offset
+            # 1B size
             locations = [[
-                int.from_bytes(region.read(3), byteorder='big', signed=False) * 4096,
-                int.from_bytes(region.read(1), byteorder='big', signed=False) * 4096
+                int.from_bytes(region_file.read(3), byteorder='big', signed=False) * 4096,
+                int.from_bytes(region_file.read(1), byteorder='big', signed=False) * 4096
             ] for i in range(1024)]
 
-            timestamps = region.read(4096)
+            timestamps = region_file.read(4096)
 
             loc = locations[((chunk_pos[0] % Sizes.REGION_WIDTH) + (chunk_pos[1] % Sizes.REGION_WIDTH) * Sizes.REGION_WIDTH)]
             if self.debug:
-                print('Loading', chunk_pos, 'from', region.name)
-            chunk = self._load_binary_chunk_at(region, loc[0], loc[1])
+                print('Loading', chunk_pos, 'from', region_file.name)
+            chunk = self._load_binary_chunk_at(region_file, loc[0], loc[1])
             self.chunks[chunk_pos] = chunk
 
     def _load_binary_chunk_at(self, region_file, offset, max_size) -> Chunk:
@@ -146,7 +148,7 @@ class World:
         datalen = int.from_bytes(region_file.read(4), byteorder='big', signed=False)
         compr = region_file.read(1)
         # print(region_file.tell()-5, datalen)
-        decompressed = zlib.decompress(region_file.read(datalen-1))
+        decompressed = zlib.decompress(region_file.read(datalen - 1))
         data = NBT.parse_nbt(InputStream(decompressed))
         chunk_pos = (data.get('Level').get('xPos').get(), data.get('Level').get('zPos').get())
         chunk = Chunk(
@@ -158,7 +160,7 @@ class World:
         )
         return chunk
 
-    def _get_region_file(self, chunk_pos):
+    def _get_region_file_name(self, chunk_pos):
         return 'r.' + '.'.join([str(x) for x in self._get_region(chunk_pos)]) + '.mca'
 
     def _to_chunk_coordinates(self, block_pos: tuple[int, int, int]) -> tuple[int, int]:

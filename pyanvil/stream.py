@@ -5,7 +5,7 @@ class InputStream:
 
     def read(self, num):
         rtn = self.buffer[self.pos:self.pos + num]
-        self.pos = self.pos + num
+        self.pos += num
         return rtn
 
     def peek(self):
@@ -17,7 +17,7 @@ class OutputStream:
         self.buffer = bytes([])
 
     def write(self, data):
-        self.buffer = self.buffer + data
+        self.buffer += data
         return self
 
     def get_data(self):
