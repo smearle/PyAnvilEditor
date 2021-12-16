@@ -1,5 +1,7 @@
+from typing import BinaryIO
 from . import ChunkSection, Sizes, Block, BlockState, Biome
 from . import CompoundTag, ListTag
+from ..utility.nbt import NBT
 from ..stream import InputStream, OutputStream
 import zlib
 import math
@@ -14,6 +16,18 @@ class Chunk:
         self.biomes = [Biome.from_index(i) for i in self.raw_nbt.get('Level').get('Biomes').get()]
         self.orig_size = orig_size
         self.index = Chunk.to_region_chunk_index(xpos, zpos)
+
+    @staticmethod
+    def from_file(file: BinaryIO, offset: int, sections: int) -> 'Chunk':
+        file.seek(offset)
+        datalen = int.from_bytes(file.read(4), byteorder="big", signed=False)
+        file.read(1)  # Compression scheme
+        decompressed = zlib.decompress(file.read(datalen - 1))
+        data = NBT.parse_nbt(InputStream(decompressed))
+        root_tag = data.get("Level")
+        x = root_tag.get("xPos").get()
+        z = root_tag.get("zPos").get()
+        return Chunk(x, z, Chunk.unpack(data), data, datalen)
 
     def get_index(self):
         return self.index

@@ -123,7 +123,6 @@ class World:
     def get_chunk(self, chunk_pos) -> Chunk:
         if chunk_pos not in self.chunks:
             self._load_chunk(chunk_pos)
-
         return self.chunks[chunk_pos]
 
     def get_canvas(self):
@@ -132,28 +131,10 @@ class World:
     def _load_chunk(self, chunk_pos):
         file_name = self._get_region_file_name(chunk_pos)
         with Region(self.world_folder / 'region' / file_name) as region:
-            loc = region.chunk_locations[((chunk_pos[0] % Sizes.REGION_WIDTH) + (chunk_pos[1] % Sizes.REGION_WIDTH) * Sizes.REGION_WIDTH)]
             if self.debug:
                 print('Loading', chunk_pos, 'from', file_name)
-            chunk = World._load_binary_chunk_at(region, offset=loc[0], max_size=loc[1])
+            chunk = region.get_chunk(x=chunk_pos[0], z=chunk_pos[1])
             self.chunks[chunk_pos] = chunk
-
-    @staticmethod
-    def _load_binary_chunk_at(region_file: FileIO, offset, max_size) -> Chunk:
-        region_file.seek(offset)
-        datalen = int.from_bytes(region_file.read(4), byteorder='big', signed=False)
-        region_file.read(1)  # Compression scheme
-        decompressed = zlib.decompress(region_file.read(datalen - 1))
-        data = NBT.parse_nbt(InputStream(decompressed))
-        chunk_pos = (data.get('Level').get('xPos').get(), data.get('Level').get('zPos').get())
-        chunk = Chunk(
-            chunk_pos[0],
-            chunk_pos[1],
-            Chunk.unpack(data),
-            data,
-            datalen
-        )
-        return chunk
 
     def _get_region_file_name(self, chunk_pos):
         return 'r.' + '.'.join([str(x) for x in self._get_region(chunk_pos)]) + '.mca'
