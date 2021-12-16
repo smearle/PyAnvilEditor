@@ -84,10 +84,10 @@ class Chunk:
         return sections
 
     def pack(self):
-        new_sections = ListTag(
+        new_sections: ListTag = ListTag(
             CompoundTag.clazz_id,
             tag_name='Sections',
-            children=[self.sections[sec].serialize() for sec in self.sections]
+            children=[sec.serialize() for sec in self.sections.values()]
         )
         new_nbt = self.raw_nbt.clone()
         new_nbt.get('Level').add_child(new_sections)
