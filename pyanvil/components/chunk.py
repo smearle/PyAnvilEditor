@@ -15,7 +15,7 @@ class Chunk:
         self.raw_nbt = raw_nbt
         self.biomes = [Biome.from_index(i) for i in self.raw_nbt.get('Level').get('Biomes').get()]
         self.orig_size = orig_size
-        self.index = Chunk.to_region_chunk_index(xpos, zpos)
+        self.__index = Chunk.to_region_chunk_index(xpos, zpos)
 
     @staticmethod
     def from_file(file: BinaryIO, offset: int, sections: int) -> 'Chunk':
@@ -29,8 +29,9 @@ class Chunk:
         z = root_tag.get("zPos").get()
         return Chunk(x, z, Chunk.unpack(data), data, datalen)
 
-    def get_index(self):
-        return self.index
+    @property
+    def index(self):
+        return self.__index
 
     @staticmethod
     def to_region_chunk_index(x, z):

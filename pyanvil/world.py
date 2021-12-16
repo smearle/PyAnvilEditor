@@ -57,11 +57,11 @@ class World:
 
                 data_in_file = bytearray(region.read())
 
-                chunks.sort(key=lambda chunk: locations[chunk.get_index()][0])
+                chunks.sort(key=lambda chunk: locations[chunk.index][0])
                 # print("writing chunks", [str(c) + ":" + str(locations[((chunk.xpos % Sizes.REGION_WIDTH) + (chunk.zpos % Sizes.REGION_WIDTH) * Sizes.REGION_WIDTH)][0]) for c in chunks])
 
                 for chunk in chunks:
-                    chunk_index = chunk.get_index()
+                    chunk_index = chunk.index
                     strm = OutputStream()
                     timestamps[chunk_index] = int(time.time())
 
