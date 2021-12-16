@@ -1,4 +1,22 @@
 import struct
+from enum import IntEnum
+from ..stream import InputStream
+
+
+class TagType(IntEnum):
+    END = 0
+    BYTE = 1
+    SHORT = 2
+    INT = 3
+    LONG = 4
+    FLOAT = 5
+    DOUBLE = 6
+    BYTE_ARRAY = 7
+    STRING = 8
+    LIST = 9
+    COMPOUND = 10
+    INT_ARRAY = 11
+    LONG_ARRAY = 12
 
 
 class NBT:
@@ -313,7 +331,7 @@ class NBT:
         return CompundNBTTag
 
     @staticmethod
-    def parse_nbt(stream):
+    def parse_nbt(stream: InputStream):
         tag_type = int.from_bytes(stream.read(1), byteorder='big', signed=False)
         tag_name_length = int.from_bytes(stream.read(2), byteorder='big', signed=False)
         tag_name = stream.read(tag_name_length).decode('utf-8')
