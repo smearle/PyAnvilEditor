@@ -76,6 +76,6 @@ with world.World('myWorld') as myWorld:
 
 ---
 ## Technical sources
-- [Region file structure 1](https://wiki.vg/Region_Files)
-- [Region file structure 2](https://minecraft.fandom.com/el/wiki/Region_file_format)
-- [Chunk NBT components](https://minecraft.fandom.com/wiki/Chunk_format)
+- [Region file structure](https://wiki.vg/Region_Files)
+- [Chunk file structure](https://wiki.vg/Chunk_Format)
+- [NBT](https://wiki.vg/NBT)
