@@ -1,5 +1,6 @@
 import sys
 import math
+from typing import Union
 import zlib
 import time
 from pathlib import Path
@@ -14,13 +15,18 @@ from .components import Sizes, Chunk
 class World:
     def __init__(self, world_folder, save_location=None, debug=False, read=True, write=True):
         self.debug = debug
-        if save_location is not None:
-            self.world_folder = Path(save_location) / world_folder
-        else:
-            self.world_folder = Path(world_folder)
-        if not self.world_folder.is_dir():
-            raise FileNotFoundError(f'No such folder \"{self.world_folder}\"')
+        self.world_folder = self.__resolve_world_folder(world_folder=world_folder, save_location=save_location)
         self.chunks = {}
+
+    def __resolve_world_folder(self, world_folder: Union[str, Path], save_location: Union[str, Path]):
+        folder = Path()
+        if save_location is not None:
+            folder = Path(save_location) / world_folder
+        else:
+            folder = Path(world_folder)
+        if not folder.is_dir():
+            raise FileNotFoundError(f'No such folder \"{folder}\"')
+        return folder
 
     def __enter__(self) -> 'World':
         return self
@@ -56,8 +62,8 @@ class World:
 
                 data_in_file = bytearray(region_file.read())
 
+                # Sort chunks by offset
                 chunks.sort(key=lambda chunk: locations[chunk.index][0])
-                # print("writing chunks", [str(c) + ":" + str(locations[((chunk.xpos % Sizes.REGION_WIDTH) + (chunk.zpos % Sizes.REGION_WIDTH) * Sizes.REGION_WIDTH)][0]) for c in chunks])
 
                 for chunk in chunks:
                     chunk_index = chunk.index
