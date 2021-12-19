@@ -1,11 +1,17 @@
 import math
+from .component_base import ComponentBase
 from . import Block, BlockState, Sizes
 from . import ByteArrayTag, ByteTag, CompoundTag, StringTag, LongArrayTag, LongTag, ListTag
 
 
-class ChunkSection:
-    def __init__(self, blocks: dict[int, Block], raw_section, y_index):
-        self.blocks: dict[int, Block] = blocks
+class ChunkSection(ComponentBase):
+    def __init__(self, raw_section, y_index, blocks: dict[int, Block] = None, parent_chunk: 'Chunk' = None):
+        super().__init__(parent=parent_chunk)
+
+        if blocks is None:
+            blocks = dict()
+        self.__blocks: dict[int, Block] = blocks
+
         self.raw_section = raw_section
         self.y_index = y_index
 
@@ -14,10 +20,16 @@ class ChunkSection:
         y = block_pos[1]
         z = block_pos[2]
 
-        return self.blocks[x + z * Sizes.SUBCHUNK_WIDTH + y * Sizes.SUBCHUNK_WIDTH ** 2]
+        return self.__blocks[x + z * Sizes.SUBCHUNK_WIDTH + y * Sizes.SUBCHUNK_WIDTH ** 2]
+
+    def set_blocks(self, blocks: dict[int, Block]):
+        if blocks is not None:
+            self.__blocks = blocks
+        else:
+            self.__blocks = dict()
 
     @staticmethod
-    def from_nbt(section_nbt) -> 'ChunkSection':
+    def from_nbt(section_nbt, parent_chunk=None) -> 'ChunkSection':
         states = []  # Sections which contain only air have no states.
         if section_nbt.has('BlockStates'):
             flatstates = [c.get() for c in section_nbt.get('BlockStates').children]
@@ -35,19 +47,21 @@ class ChunkSection:
             ]
         block_lights = ChunkSection._divide_nibbles(section_nbt.get('BlockLight').get()) if section_nbt.has('BlockLight') else None
         sky_lights = ChunkSection._divide_nibbles(section_nbt.get('SkyLight').get()) if section_nbt.has('SkyLight') else None
-        blocks = []
+        section = ChunkSection(section_nbt, section_nbt.get('Y').get(), parent_chunk=parent_chunk)
+        blocks: dict[int, Block] = dict()
         for i, state in enumerate(states):
             state = palette[state]
             block_light = block_lights[i] if block_lights else 0
             sky_light = sky_lights[i] if sky_lights else 0
-            blocks.append(Block(state=state, block_light=block_light, sky_light=sky_light))
-        return ChunkSection(blocks, section_nbt, section_nbt.get('Y').get())
+            blocks[i] = Block(state=state, block_light=block_light, sky_light=sky_light, parent_chunk_section=section)
+        section.set_blocks(blocks=blocks)
+        return section
 
     def serialize(self):
         serial_section = self.raw_section
-        dirty = any((b._dirty for b in self.blocks))
+        dirty = any((b.is_dirty for b in self.__blocks.values()))
         if dirty:
-            self.palette = list(set([b._state for b in self.blocks] + [BlockState('minecraft:air', {})]))
+            self.palette = list(set([b._state for b in self.__blocks.values()] + [BlockState('minecraft:air', {})]))
             self.palette.sort(key=lambda s: s.name)
             serial_section.add_child(ByteTag(tag_value=self.y_index, tag_name='Y'))
             mat_id_mapping = {self.palette[i]: i for i in range(len(self.palette))}
@@ -88,7 +102,7 @@ class ChunkSection:
         states_per_long = 64 // width
 
         # amount of longs
-        arraylength = math.ceil(len(self.blocks) / states_per_long)
+        arraylength = math.ceil(len(self.__blocks) / states_per_long)
 
         for long_index in range(arraylength):
             lng = 0
@@ -96,8 +110,8 @@ class ChunkSection:
                 # insert blocks in reverse, so first one ends up most to the right
                 block_index = long_index * states_per_long + (states_per_long - state - 1)
 
-                if block_index < len(self.blocks):
-                    block = self.blocks[block_index]
+                if block_index < len(self.__blocks):
+                    block = self.__blocks[block_index]
                     lng = (lng << width) + state_mapping[block._state]
 
             lng = int.from_bytes(lng.to_bytes(8, byteorder='big', signed=False), byteorder='big', signed=True)
