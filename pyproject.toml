@@ -2,6 +2,7 @@
 name = "pyanvil"
 version = "0.1.0"
 description = ""
+authors= ["tweedledum", "tweedledummer", "tweedledumdumdummy", "tweedleneurodivergent"]
 
 [tool.poetry.dependencies]
 python = "^3.9"
